@@ -1,0 +1,44 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+.next/
+dist/
+build/
+.vercel/
+
+# Environment files
+.env
+.env.local
+.env*.local
+backend/.env
+
+# ML model files (too large for git)
+backend/ml_models/*.pkl
+backend/ml_models/*.zip
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# PM2
+.pm2/
+pids/
+logs/
+*.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Backup
+*.backup
+*.bak
+*.tar.gz
