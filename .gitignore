@@ -14,7 +14,6 @@ build/
 backend/.env
 
 # ML model files (too large for git)
-backend/ml_models/*.pkl
 backend/ml_models/*.zip
 
 # Python
