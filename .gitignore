@@ -13,9 +13,6 @@ build/
 .env*.local
 backend/.env
 
-# ML model files (too large for git)
-backend/ml_models/*.zip
-
 # Python
 __pycache__/
 *.py[cod]
