@@ -16,8 +16,6 @@ from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from dotenv import load_dotenv
 
-import nltk
-
 from schemas import JobPostingInput, PredictionResult, HealthResponse
 from security import APIKeyMiddleware
 from loader import load_all_models
@@ -32,16 +30,6 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 logger = logging.getLogger("jobguard")
-
-# Download NLTK data
-try:
-    nltk.data.find("corpora/wordnet")
-except LookupError:
-    nltk.download("wordnet", quiet=True)
-try:
-    nltk.data.find("corpora/omw-1.4")
-except LookupError:
-    nltk.download("omw-1.4", quiet=True)
 
 # Global model state
 pipeline = None
@@ -118,6 +106,7 @@ async def predict(request: Request, job_input: JobPostingInput):
             description=job_input.description,
             requirements=job_input.requirements,
             benefits=job_input.benefits,
+            salary_range=job_input.salary_range,
             employment_type=job_input.employment_type,
             required_experience=job_input.required_experience,
             required_education=job_input.required_education,
@@ -132,6 +121,43 @@ async def predict(request: Request, job_input: JobPostingInput):
     except Exception as e:
         logger.error(f"Prediction failed: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal prediction error. Please try again.")
+
+
+@app.get("/preview", response_model=PredictionResult)
+@limiter.limit("10/minute")
+async def preview(request: Request):
+    """Live demo — predicts on a hardcoded fake job posting for the preview page."""
+    global pipeline, shap_explainer, feature_names
+
+    if pipeline is None or shap_explainer is None or feature_names is None:
+        raise HTTPException(status_code=503, detail="Model unavailable. Server cannot produce predictions.")
+
+    try:
+        result = run_prediction(
+            pipeline=pipeline,
+            shap_explainer=shap_explainer,
+            feature_names=feature_names,
+            title="Data Entry Specialist",
+            company_name="Global Opportunities Inc",
+            company_profile="",
+            description="Work from home. Easy money. No experience needed. Weekly pay guaranteed. Unlimited earning potential. Be your own boss today!",
+            requirements="No experience needed. Entry level welcome.",
+            benefits="Weekly pay, work from home",
+            salary_range="",
+            employment_type="Full-time",
+            required_experience="Not Applicable",
+            required_education="Unspecified",
+            industry="Unknown",
+            function_field="Unknown",
+            has_company_logo=False,
+            has_questions=False,
+            telecommuting=True,
+            red_flags=["No company logo", "Promises easy money", "No experience required"],
+        )
+        return result
+    except Exception as e:
+        logger.error(f"Preview failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal preview error. Please try again.")
 
 
 @app.get("/health", response_model=HealthResponse)

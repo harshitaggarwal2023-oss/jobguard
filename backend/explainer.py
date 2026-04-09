@@ -81,6 +81,13 @@ FEATURE_LOOKUP = {
     "tfidf__fee": "fee or payment requirement references",
     "tfidf__account": "account creation or financial account language",
     "tfidf__processing": "processing or data entry task descriptions",
+    # New engineered features from updated model
+    "has_salary": "presence of a salary range in the posting",
+    "desc_length": "length of the job description",
+    "title_length": "length of the job title",
+    "req_length": "length of the requirements section",
+    "desc_has_html": "presence of HTML markup in the description",
+    "fraud_keyword_count": "count of fraud-associated keywords detected",
     # Binary features
     "binary__has_company_logo": "absence of a company logo in the posting",
     "binary__has_questions": "absence of structured screening questions",

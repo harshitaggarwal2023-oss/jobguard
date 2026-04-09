@@ -7,7 +7,6 @@ import re
 import logging
 import numpy as np
 import pandas as pd
-from nltk.stem import WordNetLemmatizer
 from typing import List, Dict, Tuple
 
 from schemas import ShapFeature, RiskScores, PredictionResult
@@ -15,19 +14,15 @@ from explainer import generate_explanation
 
 logger = logging.getLogger("jobguard.predictor")
 
-# RULE 4 — TEXT PREPROCESSING FUNCTION IS FROZEN
-# Copied character-for-character. Do not add steps. Do not remove steps.
-# Do not change any regex. Do not change the lemmatizer.
-lemmatizer = WordNetLemmatizer()
-
 
 def clean_text(text: str) -> str:
-    text = text.lower()
-    text = re.sub(r"<.*?>", " ", text)
-    text = re.sub(r"http\S+|www\S+", " ", text)
-    text = re.sub(r"[^a-z\s]", " ", text)
-    text = re.sub(r"\s+", " ", text).strip()
-    text = " ".join([lemmatizer.lemmatize(w) for w in text.split()])
+    if not text:
+        return ""
+    text = str(text).lower()
+    text = re.sub(r'<[^>]+>', ' ', text)
+    text = re.sub(r'http\S+', ' ', text)
+    text = re.sub(r'[^a-z\s]', ' ', text)
+    text = re.sub(r'\s+', ' ', text).strip()
     return text
 
 
@@ -46,6 +41,12 @@ def compute_risk_scores(
     }
 
 
+FRAUD_KEYWORDS = [
+    'work from home', 'no experience', 'earn money', 'weekly pay',
+    'unlimited earning', 'be your own boss', 'entry level', 'easy money'
+]
+
+
 def run_prediction(
     pipeline,
     shap_explainer,
@@ -56,6 +57,7 @@ def run_prediction(
     description: str,
     requirements: str,
     benefits: str,
+    salary_range: str,
     employment_type: str,
     required_experience: str,
     required_education: str,
@@ -71,26 +73,40 @@ def run_prediction(
     Build DataFrame, get fraud probability, verdict, SHAP values, top 10 features.
     """
 
-    # Build combined_text using the FROZEN clean_text function
+    # Build combined_text using the new clean_text function (no lemmatizer)
     combined_text = clean_text(
-        title + " " + company_profile + " " +
-        description + " " + requirements + " " + benefits
+        (title or '') + " " + (company_profile or '') + " " +
+        (description or '') + " " + (requirements or '') + " " + (benefits or '')
     )
 
-    # Step 1: Build DataFrame — RULE 3 exact column order
+    # Compute engineered features
+    has_salary = 1 if salary_range and salary_range.strip() else 0
+    desc_length = len(description or '')
+    title_length = len(title or '')
+    req_length = len(requirements or '')
+    desc_has_html = int(bool(re.search(r'<[^>]+>', description or '')))
+    fraud_keyword_count = sum(kw in combined_text for kw in FRAUD_KEYWORDS)
+
+    # Step 1: Build DataFrame — exact column order matching feature_cols.pkl
     df = pd.DataFrame([{
-        "telecommuting": int(telecommuting),
-        "has_company_logo": int(has_company_logo),
-        "has_questions": int(has_questions),
-        "employment_type": employment_type,
-        "required_experience": required_experience,
-        "required_education": required_education,
-        "industry": industry,
-        "function": function_field,
-        "combined_text": combined_text,
+        'combined_text':       combined_text,
+        'has_salary':          has_salary,
+        'has_company_logo':    int(has_company_logo),
+        'has_questions':       int(has_questions),
+        'telecommuting':       int(telecommuting),
+        'desc_length':         desc_length,
+        'title_length':        title_length,
+        'req_length':          req_length,
+        'desc_has_html':       desc_has_html,
+        'fraud_keyword_count': fraud_keyword_count,
+        'employment_type':     employment_type or 'Unknown',
+        'required_experience': required_experience or 'Unknown',
+        'required_education':  required_education or 'Unknown',
+        'industry':            industry or 'Unknown',
+        'function':            function_field or 'Unknown',
     }])
 
-    # Step 2: Get fraud probability — RULE 1, model is the ONLY source
+    # Step 2: Get fraud probability — model is the ONLY source
     fraud_probability = float(pipeline.predict_proba(df)[0][1])
 
     # Step 3: Verdict thresholds
@@ -107,7 +123,14 @@ def run_prediction(
     if hasattr(X_transformed, "toarray"):
         X_transformed = X_transformed.toarray()
     shap_values = shap_explainer.shap_values(X_transformed)
-    shap_fraud = shap_values[:, :, 1][0]
+
+    # Handle all SHAP output formats
+    if isinstance(shap_values, list):
+        shap_fraud = shap_values[1][0]       # list format: index 1 = fraud class
+    elif shap_values.ndim == 3:
+        shap_fraud = shap_values[0, :, 1]    # 3D array: (samples, features, classes)
+    else:
+        shap_fraud = shap_values[0]          # 2D array fallback
 
     # Step 5: Top 10 features by absolute SHAP value
     top_indices = np.argsort(np.abs(shap_fraud))[-10:][::-1]
@@ -126,7 +149,7 @@ def run_prediction(
     )
     risk_scores = RiskScores(**risk_scores_dict)
 
-    # Generate explanation from templates (RULE 7 — no AI)
+    # Generate explanation from templates (no AI)
     explanation = generate_explanation(
         verdict=verdict,
         fraud_probability=fraud_probability,

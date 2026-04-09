@@ -18,6 +18,7 @@ class JobPostingInput(BaseModel):
     has_questions: bool = Field(True, description="Whether posting has screening questions")
     telecommuting: bool = Field(False, description="Whether the role is remote/telecommute")
     red_flags: List[str] = Field(default_factory=list, description="Red flags observed by user")
+    salary_range: str = Field("", description="Salary range if listed (e.g. '$50,000-$70,000')")
 
 
 class ShapFeature(BaseModel):
